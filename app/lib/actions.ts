@@ -1,9 +1,12 @@
-'use server';  //This is server action
+'use server';  //React server directive, This is server action
 
 import { z} from "zod";
 import { sql } from "@vercel/postgres";
 import {revalidatePath} from "next/cache";
 import { redirect } from "next/navigation";
+import {signIn} from "@/auth"
+import { AuthError } from "next-auth";
+
 const FormSchema = z.object({
     id: z.string(),
     customerId: z.string({
@@ -24,6 +27,24 @@ export type State = {
     };
     message?: string | null;
   };
+  export async function authenticate(
+    prevState: string | undefined,
+    formData: FormData,
+  ) {
+    try {
+      await signIn('credentials', formData);
+    } catch (error) {
+      if (error instanceof AuthError) {
+        switch (error.type) {
+          case 'CredentialsSignin':
+            return 'Invalid credentials.';
+          default:
+            return 'Something went wrong.';
+        }
+      }
+      throw error;
+    }
+  }
 export async function creatInvoice(prevState: State, formData: FormData) {
     const validatedFields = CreatInvoice.safeParse({
         customerId: formData.get('customerId'),
@@ -44,7 +65,6 @@ export async function creatInvoice(prevState: State, formData: FormData) {
      //ALT
     //   const rawFormData = Object.fromEntries(formData.entries());
 try {
-
     //Insert into DB
     await sql`
     INSERT INTO invoices (customer_id, amount, status, date)
@@ -96,6 +116,7 @@ export async function updateInvoice(id:string, prevState: State,  formData: Form
     catch(error) {
         return { message: 'Database Error: Failed to Update Invoice.' };
     }
+    //clear the client cache and make a new server request
     revalidatePath('/dashboard/invoices');
     redirect('/dashboard/invoices');
     
